@@ -47,11 +47,16 @@ def test_dispatch():
 
     si.optimize()
 
-    si.linear_mip_model.optimize()
-
     decision_variables['value'] = si.get_optimal_values_of_decision_variables(decision_variables)
 
-    prices = si.price_constraints([2])
+    # Repeat the optimization with the same data but this time price the constraints w/ linear solver
+    si_linear = solver_interface.InterfaceToSolver(linear=True)
+    si_linear.add_variables(decision_variables)
+    si_linear.add_constraints(constraints_lhs_coefficient, rhs_and_type)
+    si_linear.add_objective_function(objective_function)
+    si_linear.optimize()
+
+    prices = si_linear.price_constraints([2])
 
     market_rhs_and_type['price'] = market_rhs_and_type['constraint_id'].map(prices)
 

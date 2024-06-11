@@ -2738,7 +2738,7 @@ class SpotMarket:
             constraints_lhs = pd.concat([constraints_lhs, unit_constraints_lhs])
 
         # Create the interface to the solver.
-        si = solver_interface.InterfaceToSolver(self.solver_name)
+        si = solver_interface.InterfaceToSolver(self.solver_name, linear=False)
         if self._decision_variables:
             # Combine dictionary of pd.DataFrames into a single pd.DataFrame for processing by the interface.
             variable_definitions = pd.concat(self._decision_variables)
@@ -2747,6 +2747,7 @@ class SpotMarket:
             raise check.ModelBuildError('The market could not be dispatch because no variables have been created')
 
         # If Costs have been defined for bids or constraints then add an objective function.
+        objective_function_definition = pd.DataFrame()
         if self._objective_function_components:
             # Combine components of objective function into a single pd.DataFrame
             objective_function_definition = pd.concat(self._objective_function_components)
@@ -2768,6 +2769,8 @@ class SpotMarket:
         if len(constraints_rhs_and_type) > 0:
             constraints_rhs_and_type = pd.concat(constraints_rhs_and_type)
             si.add_constraints(constraints_lhs, constraints_rhs_and_type)
+        else:
+            constraints_rhs_and_type = pd.DataFrame()
 
         # If interconnectors with losses are being used, create special ordered sets for modelling losses.
         if 'interpolation_weights' in self._decision_variables:
@@ -2784,6 +2787,7 @@ class SpotMarket:
                 si.add_sos_type_1(special_ordered_sets)
 
         si.optimize()
+        self.objective_value = si.mip_model.objective_value
 
         # Find the slack in constraints.
         if self._constraints_rhs_and_type:
@@ -2804,21 +2808,29 @@ class SpotMarket:
             self._decision_variables[var_group]['value'] = \
                 si.get_optimal_values_of_decision_variables(self._decision_variables[var_group])
 
+        # Create linear model for shadow price calculations.
+        si_linear = solver_interface.InterfaceToSolver(self.solver_name, linear=True)
+        si_linear.add_variables(variable_definitions)
+        if not objective_function_definition.empty:
+            si_linear.add_objective_function(objective_function_definition)
+        if not constraints_lhs.empty:
+            si_linear.add_constraints(constraints_lhs, constraints_rhs_and_type)
+
         # Models with interconnectors use binary variables, the model needs to be linearised to allow for shadow prices
         # to be accessed and used to price constraints.
         if 'interconnector_losses' in self._decision_variables:
-            si = self._get_linear_model(si)
-        si.linear_mip_model.optimize()
+            si_linear = self._get_linear_model(si_linear)
+        si_linear.mip_model.optimize()
 
         for var_group in self._decision_variables:
             self._decision_variables[var_group]['value_lin'] = \
-                si.get_optimal_values_of_decision_variables_lin(self._decision_variables[var_group])
+                si_linear.get_optimal_values_of_decision_variables(self._decision_variables[var_group])
 
         # If there are market constraints then calculate their associated prices.
         if self._market_constraints_rhs_and_type:
             for constraint_group in self._market_constraints_rhs_and_type:
                 constraints_to_price = list(self._market_constraints_rhs_and_type[constraint_group]['constraint_id'])
-                prices = si.price_constraints(constraints_to_price)
+                prices = si_linear.price_constraints(constraints_to_price)
                 self._market_constraints_rhs_and_type[constraint_group]['price'] = \
                     self._market_constraints_rhs_and_type[constraint_group]['constraint_id'].map(prices)
 
@@ -2865,19 +2877,18 @@ class SpotMarket:
                 variables_and_cons = pd.merge(active_violation_variables, lhs, on='variable_id')
                 variables_and_cons['adjuster'] = (variables_and_cons['value'] + 0.01) * \
                                                  variables_and_cons['coefficient'] * -1
-                variables_and_cons.apply(lambda x: si.update_rhs(x['constraint_id'], x['adjuster']), axis=1)
-                si.linear_mip_model.optimize()
+                variables_and_cons.apply(lambda x: si_linear.update_rhs(x['constraint_id'], x['adjuster']), axis=1)
+                si_linear.optimize()
 
                 # If there are market constraints then calculate their associated prices.
                 if self._market_constraints_rhs_and_type:
                     for constraint_group in self._market_constraints_rhs_and_type:
                         constraints_to_price = list(
                             self._market_constraints_rhs_and_type[constraint_group]['constraint_id'])
-                        prices = si.price_constraints(constraints_to_price)
+                        prices = si_linear.price_constraints(constraints_to_price)
                         self._market_constraints_rhs_and_type[constraint_group]['price'] = \
                             self._market_constraints_rhs_and_type[constraint_group]['constraint_id'].map(prices)
 
-        self.objective_value = si.mip_model.objective_value
 
     def _get_linear_model(self, si):
         self._remove_unused_interpolation_weights(si)

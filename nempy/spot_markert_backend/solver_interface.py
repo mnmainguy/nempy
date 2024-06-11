@@ -4,19 +4,19 @@ from mip import Model, xsum, minimize, CONTINUOUS, OptimizationStatus, BINARY, C
 
 
 class InterfaceToSolver:
-    """A wrapper for the mip model class, allows interaction with mip using pd.DataFrames."""
+    """
+    A wrapper for the mip model class, allows interaction with mip using pd.DataFrames.
+    """
 
-    def __init__(self, solver_name='CBC'):
+    def __init__(self, solver_name='CBC', linear: bool = False):
         self.variables = {}
-        self.linear_mip_variables = {}
+        self.linear = linear
 
         self.solver_name = solver_name
         if solver_name == 'CBC':
             self.mip_model = Model("market", solver_name=CBC)
-            self.linear_mip_model = Model("market", solver_name=CBC)
         elif solver_name == 'GUROBI':
             self.mip_model = Model("market", solver_name=GUROBI)
-            self.linear_mip_model = Model("market", solver_name=GUROBI)
         else:
             raise ValueError("Solver '{}' not recognised.")
 
@@ -25,10 +25,6 @@ class InterfaceToSolver:
         self.mip_model.solver.set_mip_gap(1e-20)
         self.mip_model.lp_method = LP_Method.DUAL
 
-        self.linear_mip_model.verbose = 0
-        self.linear_mip_model.solver.set_mip_gap_abs(1e-10)
-        self.linear_mip_model.solver.set_mip_gap(1e-20)
-        self.linear_mip_model.lp_method = LP_Method.DUAL
 
     def add_variables(self, decision_variables):
         """Add decision variables to the model.
@@ -83,11 +79,6 @@ class InterfaceToSolver:
                                                                  var_type=variable_types[variable_type],
                                                                  name=str(variable_id))
 
-            self.linear_mip_variables[variable_id] = self.linear_mip_model.add_var(lb=lower_bound, ub=upper_bound,
-                                                                                   var_type=variable_types[
-                                                                                       variable_type],
-                                                                                   name=str(variable_id))
-
     def add_sos_type_2(self, sos_variables, sos_id_columns, position_column):
         """Add groups of special ordered sets of type 2 two the mip model.
 
@@ -118,6 +109,9 @@ class InterfaceToSolver:
         def add_sos_vars(sos_group):
             self.mip_model.add_sos(list(zip(sos_group['vars'], sos_group[position_column])), 2)
 
+        if self.linear:
+            raise ValueError("SOS constraints are not supported in linear mode.")
+
         # For each variable_id get the variable object from the mip model
         sos_variables['vars'] = sos_variables['variable_id'].apply(lambda x: self.variables[x])
         # Break up the sets based on their id and add them to the model separately.
@@ -129,6 +123,9 @@ class InterfaceToSolver:
         # Function that adds sets to mip model.
         def add_sos_vars(sos_group):
             self.mip_model.add_sos(list(zip(sos_group['vars'], [1.0 for i in range(len(sos_variables['vars']))])), 1)
+
+        if self.linear:
+            raise ValueError("SOS constraints are not supported in linear mode.")
 
         # For each variable_id get the variable object from the mip model
         sos_variables['vars'] = sos_variables['variable_id'].apply(lambda x: self.variables[x])
@@ -172,7 +169,6 @@ class InterfaceToSolver:
         obj = minimize(xsum(objective_function['cost'][i] * self.variables[i] for i in
                             list(objective_function.index)))
         self.mip_model.objective = obj
-        self.linear_mip_model.objective = obj
 
     def add_constraints(self, constraints_lhs, constraints_type_and_rhs):
         """Add constraints to the mip model.
@@ -241,7 +237,6 @@ class InterfaceToSolver:
             else:
                 raise ValueError("Constraint type not recognised should be one of '<=', '>=' or '='.")
             self.mip_model.add_constr(new_constraint, name=str(row_id))
-            self.linear_mip_model.add_constr(new_constraint, name=str(row_id))
 
     def optimize(self):
         """Optimize the mip model.
@@ -341,10 +336,6 @@ class InterfaceToSolver:
         values = variable_definitions['variable_id'].apply(lambda x: self.mip_model.var_by_name(str(x)).x)
         return values
 
-    def get_optimal_values_of_decision_variables_lin(self, variable_definitions):
-        values = variable_definitions['variable_id'].apply(lambda x: self.linear_mip_model.var_by_name(str(x)).x)
-        return values
-
     def get_slack_in_constraints(self, constraints_type_and_rhs):
         """Get the slack values in each constraint.
 
@@ -428,9 +419,6 @@ class InterfaceToSolver:
 
         >>> si.optimize()
 
-        >>> si.linear_mip_model.optimize()
-        <OptimizationStatus.OPTIMAL: 0>
-
         >>> prices = si.price_constraints([1])
 
         >>> print(prices)
@@ -448,13 +436,17 @@ class InterfaceToSolver:
         5            5          0.0          5.0  continuous    0.0
 
         """
+        if not self.linear:
+            raise ValueError("Price constraints is only supported in linear mode.")
         costs = {}
         for id in constraint_ids_to_price:
-            costs[id] = self.linear_mip_model.constr_by_name(str(id)).pi
+            costs[id] = self.mip_model.constr_by_name(str(id)).pi
         return costs
 
     def update_rhs(self, constraint_id, violation_degree):
-        constraint = self.linear_mip_model.constr_by_name(str(constraint_id))
+        if not self.linear:
+            raise ValueError("Updating rhs is only supported in linear mode.")
+        constraint = self.mip_model.constr_by_name(str(constraint_id))
         constraint.rhs += violation_degree
 
     def update_variable_bounds(self, new_bounds):
@@ -464,10 +456,9 @@ class InterfaceToSolver:
 
     def disable_variables(self, variables):
         for var_id in variables['variable_id']:
-            var = self.linear_mip_model.var_by_name(str(var_id))
+            var = self.mip_model.var_by_name(str(var_id))
             var.lb = 0.0
             var.ub = 0.0
-
 
 def find_problem_constraint(base_prob):
     cons = []
