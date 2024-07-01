@@ -409,7 +409,7 @@ class InterfaceToSolver:
         ...   'type': ['='],
         ...   'rhs': [20.0]})
 
-        >>> si = InterfaceToSolver()
+        >>> si = InterfaceToSolver(linear=True)
 
         >>> si.add_variables(decision_variables)
 
@@ -459,6 +459,13 @@ class InterfaceToSolver:
             var = self.mip_model.var_by_name(str(var_id))
             var.lb = 0.0
             var.ub = 0.0
+
+    def dispose(self):
+        if hasattr(self.mip_model.solver, 'dispose'):
+            self.mip_model.solver.dispose()
+
+    def __del__(self):
+        self.dispose()
 
 def find_problem_constraint(base_prob):
     cons = []

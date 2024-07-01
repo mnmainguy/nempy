@@ -2889,6 +2889,9 @@ class SpotMarket:
                         self._market_constraints_rhs_and_type[constraint_group]['price'] = \
                             self._market_constraints_rhs_and_type[constraint_group]['constraint_id'].map(prices)
 
+        # Dispose of the solver interface
+        si.dispose()
+        si_linear.dispose()
 
     def _get_linear_model(self, si):
         self._remove_unused_interpolation_weights(si)
