@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from mip import Model, xsum, minimize, CONTINUOUS, OptimizationStatus, BINARY, CBC, GUROBI, LP_Method
+from mip import Model, xsum, minimize, CONTINUOUS, OptimizationStatus, BINARY, CBC, GUROBI, LP_Method, HIGHS
 
 
 class InterfaceToSolver:
@@ -17,6 +17,8 @@ class InterfaceToSolver:
             self.mip_model = Model("market", solver_name=CBC)
         elif solver_name == 'GUROBI':
             self.mip_model = Model("market", solver_name=GUROBI)
+        elif solver_name == 'HIGHS':
+            self.mip_model = Model("market", solver_name=HIGHS)
         else:
             raise ValueError("Solver '{}' not recognised.")
 
@@ -461,8 +463,11 @@ class InterfaceToSolver:
             var.ub = 0.0
 
     def dispose(self):
-        if hasattr(self.mip_model.solver, 'dispose'):
-            self.mip_model.solver.dispose()
+        if hasattr(self.mip_model, 'solver'):
+            if hasattr(self.mip_model.solver, 'dispose'):
+                self.mip_model.solver.dispose()
+
+        del self.mip_model
 
     def __del__(self):
         self.dispose()

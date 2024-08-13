@@ -392,14 +392,12 @@ files = [
 
 [[package]]
 name = "mip"
-version = "1.16rc0"
+version = "1.16rc1.dev2+g0ccb811"
 description = "Python tools for Modeling and Solving Mixed-Integer Linear Programs (MIPs)"
 optional = false
 python-versions = "<3.13,>=3.7"
-files = [
-    {file = "mip-1.16rc0-py3-none-any.whl", hash = "sha256:62e04c27bce56da94d070f6b03d9e342600d10f4016984334af7dae8c0f9fd09"},
-    {file = "mip-1.16rc0.tar.gz", hash = "sha256:f250083a41f4e1f61b6885041d64ed2a88bff5ead7165c329b5b31d07c517466"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 cffi = ">=1.15"
@@ -409,6 +407,12 @@ gurobi = ["gurobipy (>=8)"]
 highs = ["highspy (>=1.5.3)"]
 numpy = ["numpy (==1.21.*)", "numpy (==1.24.*)", "numpy (>=1.25)"]
 test = ["matplotlib (==3.5.3)", "matplotlib (==3.6.2)", "matplotlib (>=3.7)", "networkx (==2.6.3)", "networkx (==2.8.8)", "pytest (>=7.4)"]
+
+[package.source]
+type = "git"
+url = "https://github.com/coin-or/python-mip.git"
+reference = "HEAD"
+resolved_reference = "0ccb81115543e737ab74a4f1309891ce5650c8d5"
 
 [[package]]
 name = "numpy"
@@ -540,8 +544,8 @@ files = [
 [package.dependencies]
 numpy = [
     {version = ">=1.20.3", markers = "python_version < \"3.10\""},
-    {version = ">=1.21.0", markers = "python_version >= \"3.10\" and python_version < \"3.11\""},
     {version = ">=1.23.2", markers = "python_version >= \"3.11\""},
+    {version = ">=1.21.0", markers = "python_version >= \"3.10\" and python_version < \"3.11\""},
 ]
 python-dateutil = ">=2.8.2"
 pytz = ">=2020.1"
@@ -925,4 +929,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<3.13"
-content-hash = "73dff1b41e265e9b504f0a8b4f6af19c7a1a53f64c72278d3c62a59e1c26bf03"
+content-hash = "9690cc5df14490444c4d9ab8eb1ed37f0b25a5165ea8cd94bf0bd8ba59b874c6"
